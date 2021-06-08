@@ -1167,9 +1167,10 @@ static int _snd_config_search(snd_config_t *config,
 
 static int parse_value(snd_config_t **_n, snd_config_t *parent, input_t *input, char **id, int skip)
 {
-	snd_config_t *n = *_n;
+	snd_config_t *n = *_n, *n2;
 	char *s;
 	int err;
+	snd_config_iterator_t iter, next;
 
 	err = get_string(&s, 0, input);
 	if (err < 0)
@@ -1193,6 +1194,21 @@ static int parse_value(snd_config_t **_n, snd_config_t *parent, input_t *input, 
 						return -EINVAL;
 					}
 				} else {
+					double r1;
+					snd_config_for_each(iter, next, parent) {
+						n2 = snd_config_iterator_entry(iter);
+						if (n2->type != SND_CONFIG_TYPE_REAL)
+							continue;
+
+						err = snd_config_get_real(n2, &r1);
+						if (err < 0)
+							return err;
+
+						/* The array element we want to add already exists */
+						if (!memcmp(&r, &r1, sizeof(r)))
+							return 0;
+					}
+
 					err = _snd_config_make_add(&n, id, SND_CONFIG_TYPE_REAL, parent);
 					if (err < 0)
 						return err;
@@ -1209,6 +1225,31 @@ static int parse_value(snd_config_t **_n, snd_config_t *parent, input_t *input, 
 					return -EINVAL;
 				}
 			} else {
+				long lval;
+				long long llval;
+				snd_config_for_each(iter, next, parent) {
+					n2 = snd_config_iterator_entry(iter);
+
+					if (n2->type != SND_CONFIG_TYPE_INTEGER &&
+							n2->type != SND_CONFIG_TYPE_INTEGER64)
+						continue;
+
+					if (n2->type == SND_CONFIG_TYPE_INTEGER) {
+						err = snd_config_get_integer(n2, &lval);
+						if (err < 0)
+							return err;
+						/* The array element we want to add already exists */
+						if ((long)i == lval)
+							return 0;
+					} else {
+						err = snd_config_get_integer64(n2, &llval);
+						if (err < 0)
+							return err;
+						if (i == llval)
+							return 0;
+					}
+
+				}
 				if (i <= INT_MAX) 
 					err = _snd_config_make_add(&n, id, SND_CONFIG_TYPE_INTEGER, parent);
 				else
@@ -1231,6 +1272,19 @@ static int parse_value(snd_config_t **_n, snd_config_t *parent, input_t *input, 
 			return -EINVAL;
 		}
 	} else {
+		const char *str;
+		snd_config_for_each(iter, next, parent) {
+			n2 = snd_config_iterator_entry(iter);
+			if (n2->type != SND_CONFIG_TYPE_STRING)
+				continue;
+
+			err = snd_config_get_string(n2, &str);
+			if (err < 0)
+				return err;
+			/* The array element we want to add already exists */
+			if (!strcmp(s, str))
+				return 0;
+		}
 		err = _snd_config_make_add(&n, id, SND_CONFIG_TYPE_STRING, parent);
 		if (err < 0)
 			return err;
